@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chess Game 1 — v3 固化版（人 vs Bot）</title>
+<style>
+  :root{
+    --bg:#0e1117;
+    --panel:#161b24;
+    --panel-2:#1d2430;
+    --line:#2a3442;
+    --txt:#e6edf3;
+    --dim:#8b98a9;
+    --red:#d9484f;
+    --red-soft:#ff7b81;
+    --blue:#3b7ddd;
+    --blue-soft:#7db0ff;
+    --gold:#ffd166;
+    --ok:#4ade80;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:radial-gradient(1200px 600px at 20% -10%, #17202c 0%, var(--bg) 60%);
+    color:var(--txt);
+    font-family:system-ui,-apple-system,"Segoe UI","Noto Sans TC","Microsoft JhengHei",sans-serif;
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:18px 16px 40px}
+  header{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  h1{font-size:19px;margin:0;letter-spacing:.3px}
+  header .tag{font-size:12px;color:var(--dim);border:1px solid var(--line);border-radius:999px;padding:2px 9px}
+  .layout{display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap}
+
+  /* ---------- board ---------- */
+  .boardcol{position:relative}
+  .board{
+    display:grid;
+    grid-template-columns:repeat(20,1fr);
+    grid-template-rows:repeat(20,1fr);
+    width:min(84vmin,640px);
+    height:min(84vmin,640px);
+    gap:1px;
+    padding:6px;
+    background:#0b0f15;
+    border:1px solid var(--line);
+    border-radius:12px;
+    box-shadow:0 18px 50px rgba(0,0,0,.5);
+    user-select:none;
+    touch-action:manipulation;
+  }
+  .cell{
+    position:relative;
+    border-radius:2px;
+    cursor:pointer;
+    transition:box-shadow .08s linear;
+  }
+  .cell.red{background:var(--red)}
+  .cell.blue{background:var(--blue)}
+  .cell.frozen::after{
+    content:"";position:absolute;inset:0;margin:auto;
+    width:30%;height:30%;border-radius:50%;background:#000;
+  }
+  .cell.movable{box-shadow:inset 0 0 0 2px rgba(255,255,255,.40)}
+  .cell.last::before{
+    content:"";position:absolute;left:1px;top:1px;width:6px;height:6px;
+    border-radius:50%;background:var(--gold);box-shadow:0 0 6px rgba(255,209,102,.9)
+  }
+  .cell.sel{box-shadow:inset 0 0 0 3px #fff, 0 0 12px rgba(255,255,255,.55);z-index:3}
+  .cell.tgt{box-shadow:inset 0 0 0 3px var(--gold), 0 0 12px rgba(255,209,102,.55);z-index:2}
+  .cell.near{box-shadow:inset 0 0 0 2px rgba(255,209,102,.40)}
+  .board.locked .cell{cursor:default}
+
+  .hint{margin-top:10px;font-size:13px;color:var(--dim);min-height:38px;line-height:1.5}
+  .hint b{color:var(--txt);font-weight:600}
+  .hint .up{color:var(--ok)}
+  .hint .down{color:var(--red-soft)}
+
+  /* ---------- panel ---------- */
+  .panel{width:344px;flex:1 1 320px;min-width:300px;display:flex;flex-direction:column;gap:12px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 13px}
+  .card h2{font-size:12px;margin:0 0 10px;color:var(--dim);font-weight:600;letter-spacing:.6px;text-transform:uppercase}
+
+  .side{display:flex;align-items:center;gap:10px;padding:8px 9px;border-radius:9px;background:var(--panel-2);border:1px solid transparent}
+  .side+.side{margin-top:8px}
+  .side.active{border-color:#3d4b5f;box-shadow:0 0 0 1px #3d4b5f inset}
+  .side.you::after{content:"你";font-size:10px;background:#2f3b4c;color:#cfe0f5;border-radius:5px;padding:1px 5px;margin-left:auto}
+  .side.bot::after{content:"BOT";font-size:10px;background:#2f3b4c;color:#cfe0f5;border-radius:5px;padding:1px 5px;margin-left:auto}
+  .dot{width:16px;height:16px;border-radius:5px;flex:none}
+  .dot.red{background:var(--red)}
+  .dot.blue{background:var(--blue)}
+  .side .num{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;min-width:62px;text-align:right}
+  .side .sub{font-size:11px;color:var(--dim);line-height:1.35}
+  .bar{height:5px;border-radius:3px;background:#0d1219;overflow:hidden;margin-top:6px}
+  .bar i{display:block;height:100%;width:0;transition:width .18s ease}
+  .bar.red i{background:linear-gradient(90deg,#8d2c31,var(--red-soft))}
+  .bar.blue i{background:linear-gradient(90deg,#24508f,var(--blue-soft))}
+
+  .status{font-size:13px;line-height:1.5}
+  .status .big{font-size:15px;font-weight:600}
+  .pill{display:inline-block;font-size:11px;border-radius:999px;padding:2px 8px;background:#26313f;color:#c7d5e6;margin-right:6px}
+  .pill.win{background:#1f4d33;color:#a7f3c8}
+  .pill.lose{background:#4d2020;color:#ffc9c9}
+  .pill.draw{background:#3d3a22;color:#ffe9a8}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  label.f{display:block;font-size:11px;color:var(--dim);margin-bottom:4px}
+  select{
+    width:100%;background:var(--panel-2);color:var(--txt);border:1px solid var(--line);
+    border-radius:8px;padding:6px 8px;font-size:13px;font-family:inherit;
+  }
+  .chk{display:flex;align-items:center;gap:7px;font-size:12.5px;color:#c7d5e6;margin-top:9px;cursor:pointer}
+  .chk input{accent-color:#4b7fd6;width:15px;height:15px}
+  .btns{display:flex;gap:8px;margin-top:11px;flex-wrap:wrap}
+  button{
+    flex:1 1 auto;background:#233046;color:var(--txt);border:1px solid #33435c;border-radius:9px;
+    padding:8px 10px;font-size:13px;font-family:inherit;cursor:pointer;transition:background .12s;
+    white-space:nowrap;
+  }
+  button:hover:not(:disabled){background:#2b3b56}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  button.primary{background:#2f5da8;border-color:#3f74c9}
+  button.primary:hover:not(:disabled){background:#3769bb}
+
+  .log{height:190px;overflow-y:auto;font-size:12px;font-variant-numeric:tabular-nums;
+       font-family:ui-monospace,Consolas,"Cascadia Mono",monospace;line-height:1.65}
+  .log div{display:flex;gap:8px;padding:1px 2px;border-radius:4px}
+  .log div:nth-child(odd){background:rgba(255,255,255,.025)}
+  .log .p{color:#6d7c8f;min-width:26px;text-align:right}
+  .log .who{min-width:22px}
+  .log .who.r{color:var(--red-soft)}
+  .log .who.b{color:var(--blue-soft)}
+  .log .sc{color:var(--dim);margin-left:auto}
+  .log .mv{color:#9fb0c4}
+  .log .mv.pass{color:#6d7c8f;font-style:italic}
+  .fixed{font-size:11.5px;color:var(--dim);line-height:1.7;margin-top:10px;
+         border-top:1px solid var(--line);padding-top:9px}
+  .fixed b{color:#c7d5e6}
+
+  details{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 13px}
+  details summary{cursor:pointer;font-size:12.5px;color:var(--dim);font-weight:600;letter-spacing:.4px}
+  details .body{font-size:12.5px;color:#b9c6d6;line-height:1.7;margin-top:9px}
+  details .body code{background:#0d1219;border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-size:11.5px}
+  details .body ul{margin:6px 0;padding-left:18px}
+  details .body li{margin:3px 0}
+
+  .overlay{
+    position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+    background:rgba(8,11,16,.76);backdrop-filter:blur(3px);border-radius:12px;padding:20px;text-align:center;z-index:9;
+  }
+  .overlay.on{display:flex}
+  .overlay .box{max-width:380px}
+  .overlay h3{margin:0 0 8px;font-size:24px}
+  .overlay p{margin:0 0 16px;font-size:13.5px;color:#b9c6d6;line-height:1.6}
+  .overlay .btns{justify-content:center}
+  .overlay button{flex:0 1 auto;min-width:110px}
+  .thinking{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--gold);
+            margin-right:6px;animation:blink 1s infinite}
+  @keyframes blink{0%,100%{opacity:.25}50%{opacity:1}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Chess Game 1 — v3.1 固化版</h1>
+    <span class="tag">n = 20</span>
+    <span class="tag">交換後兩格永久固化</span>
+    <span class="tag">k·log₂k 計分（無 floor）</span>
+    <span class="tag">門檻 500</span>
+    <span class="tag">上限 120 手</span>
+    <span class="tag">可跳過（算一手）</span>
+  </header>
+
+  <div class="layout">
+    <div class="boardcol">
+      <div id="board" class="board"></div>
+      <div id="hint" class="hint"></div>
+    </div>
+
+    <div class="panel">
+      <div class="card">
+        <h2>局勢</h2>
+        <div id="sideRed" class="side">
+          <div class="dot red"></div>
+          <div style="flex:1">
+            <div style="font-size:12px;color:var(--dim)">紅方分數</div>
+            <div class="bar red"><i id="barRed"></i></div>
+            <div class="sub" id="subRed"></div>
+          </div>
+          <div class="num" id="numRed">0</div>
+        </div>
+        <div id="sideBlue" class="side">
+          <div class="dot blue"></div>
+          <div style="flex:1">
+            <div style="font-size:12px;color:var(--dim)">藍方分數</div>
+            <div class="bar blue"><i id="barBlue"></i></div>
+            <div class="sub" id="subBlue"></div>
+          </div>
+          <div class="num" id="numBlue">0</div>
+        </div>
+        <div class="status" id="status" style="margin-top:11px"></div>
+      </div>
+
+      <div class="card">
+        <h2>設定（開新局才生效）</h2>
+        <div class="grid2">
+          <div>
+            <label class="f" for="selDiff">BOT 難度</label>
+            <select id="selDiff">
+              <option value="random">隨機</option>
+              <option value="easy">簡單（半隨機）</option>
+              <option value="normal" selected>普通（1 手貪心・競速）</option>
+              <option value="hard">困難（深度 2・競速）</option>
+              <option value="block">專家（深度 2・封鎖壓制）</option>
+            </select>
+          </div>
+          <div>
+            <label class="f" for="selSide">你執</label>
+            <select id="selSide">
+              <option value="0" selected>紅方（先手）</option>
+              <option value="1">藍方（後手）</option>
+            </select>
+          </div>
+        </div>
+        <label class="chk"><input type="checkbox" id="chkSend" checked> 送勝條款（一手只讓對手達標 → 對手勝）</label>
+        <label class="chk"><input type="checkbox" id="chkHints"> 標示「全部」可交換的格子（較花；滑鼠移過某格時一律會顯示它的可交換鄰格）</label>
+        <div class="btns">
+          <button id="btnNew" class="primary">開新局</button>
+          <button id="btnPass">跳過</button>
+          <button id="btnUndo">悔棋（剩 3）</button>
+          <button id="btnResign">認輸</button>
+        </div>
+        <div class="fixed">
+          固定規則：勝利門檻 <b>T = 500</b>　·　上限 <b>120 手</b>（紅 60 + 藍 60）<br>
+          「跳過」也是一手，雙方都能用。
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>棋譜</h2>
+        <div class="log" id="log"></div>
+      </div>
+
+      <details>
+        <summary>完整規則（v3.1 固定版）— 點開</summary>
+        <div class="body">
+          <p style="margin:2px 0 8px;color:#8b98a9">座標顯示為 <code>(行,列)</code>，皆從 1 開始。</p>
+
+          <b>1. 盤面</b>
+          <ul>
+            <li>20×20 ＝ 400 格，每格非紅即藍，交錯排列（<code>(行+列)</code> 為偶數＝紅）。<b>紅方先手。</b></li>
+            <li>每一手只是「交換兩格內容」，所以<b>紅、藍棋子數永遠各 200 顆</b>，不會增減（不變量）。</li>
+            <li>盤面沒有空格、沒有棋子編號，同色棋子不可區分。</li>
+          </ul>
+
+          <b>2. 你的一手可以做什麼</b>
+          <ul>
+            <li><b>交換</b>：選上下左右相鄰、<b>顏色相異</b>、且<b>兩格都尚未固化</b>的格子互換內容。</li>
+            <li><b>跳過（Pass）</b>：什麼都不做，直接把行棋權交給對手。<b>跳過同樣消耗一手</b>，雙方都能用，次數不限。</li>
+            <li>不合法：同色相鄰互換（盤面不變，不算一手）、不相鄰、越界、任一格已固化。</li>
+          </ul>
+
+          <b>3. 固化（本版核心）</b>
+          <ul>
+            <li>被交換過的兩格<b>立即永久固化</b>，之後任何一方都不得再交換它們。這是那一手的一部分，不可省略。</li>
+            <li>固化<b>不影響計分</b>：固化格照樣算顏色、照樣算連通區域。</li>
+            <li>因為每手固定固化 2 格，固化集合只增不減 → <b>盤面狀態不可能重複</b>，所以本遊戲<b>不需要</b>「禁止重複盤面」規則。</li>
+            <li>遊戲開始時有 760 組合法交換；隨著固化增加而減少。</li>
+          </ul>
+
+          <b>4. 計分</b>
+          <ul>
+            <li>「連通區域」＝同色且以上下左右相連的最大格子集合（固化與否不影響）。</li>
+            <li>單色分數 ＝ 所有區域的 <code>k × log₂k</code> 加總（k 是該區域格數；k = 1 時貢獻 0）。<b>不做 floor／四捨五入</b>，分數是小數。</li>
+            <li>單色理論上限 <b>1528.8</b>＝200 顆全部連成一區（200 × log₂200）。<code>k·log₂k</code> 是凸函數且 <code>f(0)=0</code>，所以 <code>f(a)+f(b) ≤ f(a+b)</code> —— <b>拆開大區永遠不划算</b>，而且合併的邊際效益會隨區域變大而上升。</li>
+          </ul>
+
+          <b>5. 勝負（每一手結束後立即結算一次）</b>
+          <ul>
+            <li><b>勝利門檻 T = 500</b>：分數達到 500 的一方立刻獲勝。</li>
+            <li>若一手同時讓雙方都達標 → <b>和局</b>。</li>
+            <li><b>送勝條款</b>（可用開關關閉）：你的一手若只讓<b>對手</b>達標而自己未達標 → 對手勝。關閉時只有落子方能為自己宣勝。</li>
+            <li><b>上限 120 手</b>（紅 60 + 藍 60）：第 120 手結束後強制結算 —— 比分數，高者勝，<b>同分和局</b>。</li>
+            <li><b>自然終局</b>：若輪到你時盤面上已經<b>完全不存在</b>合法交換（雙方都一樣動不了），遊戲立即結束並比分數。</li>
+          </ul>
+
+          <b>6. 悔棋（對局輔助，不是棋規）</b>
+          <ul>
+            <li>整局最多 <b>3 次</b>。悔棋會退回到你上一手之前（包含對手對你那一手的回應）。</li>
+          </ul>
+
+          <b>7. 必讀：所有權只是敘述，不是限制</b>
+          <ul>
+            <li>交換是<b>對稱操作</b> —— 對任何一組相鄰異色格，「紅方動紅子」與「藍方動藍子」造成的下一盤面<b>完全相同</b>。</li>
+            <li>所以「只能移動自己的棋子」在數學上<b>不構成任何限制</b>：雙方每一手的可選走法集合永遠相同。所有權只決定「你要為哪一色得分」。</li>
+            <li>結論：<b>你也可以直接點藍格來交換</b>，那是完全合法的走法，不是 bug。</li>
+          </ul>
+        </div>
+      </details>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+/* =========================================================
+   常數與狀態
+   ========================================================= */
+const N = 20, CELLS = N*N, RED = 0, BLUE = 1;
+
+const board  = new Uint8Array(CELLS);   // 0=紅 1=藍
+const frozen = new Uint8Array(CELLS);   // 1=已固化
+let scores   = [0,0];
+let maxReg   = [0,0];
+
+let ply = 0, turn = RED, gameOver = false, result = null;
+let history = [];                       // [{m, mover}]
+let lastMove = -1, selected = -1, thinking = false;
+let hoverCell = -1, moveCountNow = 0;
+let logLines = [];
+let logRendered = -1;
+
+// 設定（開新局時套用）
+let humanColor = RED, botColor = BLUE;
+let difficulty = 'normal';
+let T = 500;              // 固定勝利門檻（v3.1）
+let sendWin = true;
+let maxPly = 120;         // 固定上限：紅 60 + 藍 60
+let showHints = true;
+let botObjective = 'own';
+let undoLeft = 3;         // 整局可悔棋次數
+
+const UNDO_MAX = 3, T_FIXED = 500, PLY_CAP = 120;
+
+/* =========================================================
+   評分：flood fill
+   ========================================================= */
+const visited = new Uint8Array(CELLS);
+const stack   = new Int32Array(CELLS);
+
+// 計分：f(k) = k·log2(k)（不使用 floor；k = 1 時為 0）
+const fscore = k => k * Math.log2(k);
+// 分數顯示：整數就顯示整數，否則一位小數
+const fmt = v => (Math.abs(v - Math.round(v)) < 1e-9) ? String(Math.round(v)) : v.toFixed(1);
+const MAX_SCORE = 200 * Math.log2(200);   // 1528.8，200 顆連成一區
+
+function computeScores(){
+  visited.fill(0);
+  let r=0, b=0, mr=0, mb=0;
+  for (let i=0;i<CELLS;i++){
+    if (visited[i]) continue;
+    const c = board[i];
+    let sp=0, size=0;
+    stack[sp++]=i; visited[i]=1;
+    while (sp>0){
+      const v = stack[--sp]; size++;
+      const x = v - ((v/N)|0)*N;
+      if (x>0){ const w=v-1;  if(!visited[w] && board[w]===c){ visited[w]=1; stack[sp++]=w; } }
+      if (x<N-1){ const w=v+1; if(!visited[w] && board[w]===c){ visited[w]=1; stack[sp++]=w; } }
+      if (v>=N){ const w=v-N; if(!visited[w] && board[w]===c){ visited[w]=1; stack[sp++]=w; } }
+      if (v<CELLS-N){ const w=v+N; if(!visited[w] && board[w]===c){ visited[w]=1; stack[sp++]=w; } }
+    }
+    const s = fscore(size);
+    if (c===RED){ r+=s; if(size>mr) mr=size; } else { b+=s; if(size>mb) mb=size; }
+  }
+  scores[0]=r; scores[1]=b; maxReg[0]=mr; maxReg[1]=mb;
+}
+
+/* =========================================================
+   走法
+   ========================================================= */
+const moveBuf = new Int32Array(2*CELLS);
+let moveCount = 0;
+
+function genMoves(){
+  moveCount = 0;
+  for (let y=0;y<N;y++){
+    const base = y*N;
+    for (let x=0;x<N;x++){
+      const i = base+x;
+      if (frozen[i]) continue;
+      if (x<N-1){ const j=i+1; if(!frozen[j] && board[i]!==board[j]) moveBuf[moveCount++]=i*CELLS+j; }
+      if (y<N-1){ const j=i+N; if(!frozen[j] && board[i]!==board[j]) moveBuf[moveCount++]=i*CELLS+j; }
+    }
+  }
+  return moveCount;
+}
+const mI = m => (m/CELLS)|0;
+const mJ = m => m % CELLS;
+const enc = (i,j) => (i<j ? i*CELLS+j : j*CELLS+i);
+
+function applyMove(m){
+  const i=mI(m), j=mJ(m);
+  const t=board[i]; board[i]=board[j]; board[j]=t;
+  frozen[i]=1; frozen[j]=1;
+}
+function undoMove(m){
+  const i=mI(m), j=mJ(m);
+  const t=board[i]; board[i]=board[j]; board[j]=t;
+  frozen[i]=0; frozen[j]=0;
+}
+function isLegalPair(i,j){
+  return !frozen[i] && !frozen[j] && board[i]!==board[j];
+}
+function partnersOf(i){
+  const out=[], x = i - ((i/N)|0)*N;
+  if (x>0     && isLegalPair(i,i-1)) out.push(i-1);
+  if (x<N-1   && isLegalPair(i,i+1)) out.push(i+1);
+  if (i>=N    && isLegalPair(i,i-N)) out.push(i-N);
+  if (i<CELLS-N && isLegalPair(i,i+N)) out.push(i+N);
+  return out;
+}
+
+/* =========================================================
+   終局判定
+   ========================================================= */
+const scoreLine = () => `紅 ${fmt(scores[0])} : 藍 ${fmt(scores[1])}`;
+
+function thresholdResult(mover){
+  if (T===Infinity) return null;
+  const r = scores[0]>=T, b = scores[1]>=T;
+  if (r && b) return {result:'draw', reason:`一手之後雙方同時達到門檻 ${T}（${scoreLine()}）`};
+  if (sendWin){
+    if (r) return {result:'red',  reason:`紅方達到門檻 ${T}（${scoreLine()}）`};
+    if (b) return {result:'blue', reason:`藍方達到門檻 ${T}（${scoreLine()}）`};
+  } else {
+    if (mover===RED  && r) return {result:'red',  reason:`紅方（落子方）達到門檻 ${T}（${scoreLine()}）`};
+    if (mover===BLUE && b) return {result:'blue', reason:`藍方（落子方）達到門檻 ${T}（${scoreLine()}）`};
+  }
+  return null;
+}
+function compareResult(reason){
+  if (scores[0]>scores[1]) return {result:'red',  reason:`${reason}；比分 ${scoreLine()}`};
+  if (scores[1]>scores[0]) return {result:'blue', reason:`${reason}；比分 ${scoreLine()}`};
+  return {result:'draw', reason:`${reason}；同分 ${scoreLine()}`};
+}
+
+/* =========================================================
+   進行一手（m = -1 代表「跳過」）
+   ========================================================= */
+function doPly(m, noBot){
+  const mover = turn;
+  history.push({m, mover});
+  if (m >= 0){ applyMove(m); lastMove = m; }
+  ply++;
+  computeScores();
+
+  let res = thresholdResult(mover);
+  if (!res && genMoves()===0) res = compareResult('沒有任何合法交換（自然終局）');
+  if (!res && maxPly>0 && ply>=maxPly) res = compareResult(`第 ${maxPly} 手上限（紅 60 + 藍 60）結算`);
+
+  logLines.push({
+    ply, mover, pass: m<0,
+    text: m<0 ? '跳過（Pass）' : `(${mI(m)%N+1},${((mI(m)/N)|0)+1})↔(${mJ(m)%N+1},${((mJ(m)/N)|0)+1})`,
+    sc:`${fmt(scores[0])}/${fmt(scores[1])}`
+  });
+
+  if (res){ gameOver = true; result = res; }
+  else turn = 1-mover;
+
+  selected = -1;
+  render();
+  if (!gameOver && turn===botColor && !noBot) botPlay();
+  return res;
+}
+
+function playMove(m, noBot){ return doPly(m, noBot); }
+function playPass(noBot){ return doPly(-1, noBot); }
+
+/* =========================================================
+   Bot
+   ========================================================= */
+const yieldUI = () => new Promise(r => setTimeout(r, 0));
+
+function valueFor(color, mover){
+  const a = scores[color], b = scores[1-color];
+  if (T!==Infinity){
+    const ra = a>=T, rb = b>=T;
+    if (ra && rb) return a - b;                 // 和局：用分數差當次要目標
+    if (sendWin){
+      if (ra) return  1e6 + a - b;
+      if (rb) return -1e6 + a - b;
+    } else {
+      if (mover===color   && ra) return  1e6 + a - b;
+      if (mover===1-color && rb) return -1e6 + a - b;
+    }
+  }
+  // 'own'  = 競速：以養大自己的區為主，只用很小的權重干擾對手
+  // 'diff' = 壓制：直接最大化分數差（會互相卡死，較難纏但會拖長）
+  return botObjective==='own' ? a - b*0.03 : a - b;
+}
+
+async function chooseBotMove(color, level, objOverride){
+  botObjective = objOverride || (level==='block' ? 'diff' : 'own');
+  const n = genMoves();
+  if (n===0) return null;
+  const cands = Array.from(moveBuf.subarray(0,n));
+
+  if (level==='random') return cands[(Math.random()*cands.length)|0];
+
+  // ---- 1-ply 掃描（全部候選） ----
+  const scored = [];
+  for (let k=0;k<cands.length;k++){
+    const m = cands[k];
+    applyMove(m); computeScores();
+    scored.push({m, v: valueFor(color, color) + Math.random()*1e-6, my: scores[color]});
+    undoMove(m);
+    if ((k & 127)===127) await yieldUI();
+  }
+  scored.sort((a,b)=> b.v - a.v);
+
+  // 若「每一手都對自己不利」（殘局常見），跳過比硬走好 → 回傳 -1 代表 Pass
+  if (scored[0].v <= 0) return -1;
+
+  if (level==='easy'){
+    if (Math.random() < 0.45) return cands[(Math.random()*cands.length)|0];
+    const pool = scored.slice(0, Math.min(8, scored.length));
+    return pool[(Math.random()*pool.length)|0].m;
+  }
+  if (level==='normal') return scored[0].m;
+
+  // ---- 深度 2 maximin：我選的每一手，對手都會挑最傷我的回應 ----
+  const K = Math.min(8, scored.length);
+  let bestM = scored[0].m, bestV = -Infinity;
+  for (let k=0;k<K;k++){
+    const m = scored[k].m;
+    applyMove(m);
+    const nn = genMoves();
+    const replies = Array.from(moveBuf.subarray(0,nn));
+    let worst = Infinity;
+    if (replies.length===0){
+      computeScores();
+      worst = valueFor(color, 1-color);
+    } else {
+      for (let t=0;t<replies.length;t++){
+        applyMove(replies[t]); computeScores();
+        const v = valueFor(color, 1-color);
+        undoMove(replies[t]);
+        if (v<worst) worst = v;
+        if ((t & 127)===127) await yieldUI();
+      }
+    }
+    undoMove(m);
+    if (worst>bestV){ bestV = worst; bestM = m; }
+  }
+  return bestM;
+}
+
+async function botPlay(){
+  if (gameOver) return;
+  thinking = true; render();
+  const m = await chooseBotMove(botColor, difficulty);
+  thinking = false;
+  if (gameOver) return;
+  if (m==null){
+    gameOver = true;
+    result = compareResult('沒有任何合法交換（自然終局）');
+    render(); return;
+  }
+  if (m===-1){ playPass(); return; }
+  playMove(m);
+}
+
+/* =========================================================
+   DOM 建立與繪製
+   ========================================================= */
+const boardEl = document.getElementById('board');
+const hintEl  = document.getElementById('hint');
+const cellEls = new Array(CELLS);
+
+for (let i=0;i<CELLS;i++){
+  const d = document.createElement('div');
+  d.className = 'cell';
+  d.dataset.i = i;
+  boardEl.appendChild(d);
+  cellEls[i] = d;
+}
+
+const $ = id => document.getElementById(id);
+const elNumR=$('numRed'), elNumB=$('numBlue'), elBarR=$('barRed'), elBarB=$('barBlue');
+const elSubR=$('subRed'), elSubB=$('subBlue');
+const elStatus=$('status'), elLog=$('log');
+const elSideR=$('sideRed'), elSideB=$('sideBlue');
+const btnUndo=$('btnUndo'), btnResign=$('btnResign'), btnPass=$('btnPass');
+
+// 結束用的浮層
+const overlay = document.createElement('div');
+overlay.className = 'overlay';
+overlay.innerHTML = '<div class="box"><h3 id="ovTitle"></h3><p id="ovText"></p>'+
+                    '<div class="btns"><button class="primary" id="ovNew">再來一局</button>'+
+                    '<button id="ovUndo">悔棋復盤</button></div></div>';
+document.querySelector('.boardcol').appendChild(overlay);
+$('ovNew').addEventListener('click', newGame);
+$('ovUndo').addEventListener('click', undo);
+
+function colorName(c){ return c===RED ? '紅方' : '藍方'; }
+function whoIs(c){ return c===humanColor ? '你' : 'BOT'; }
+
+// result.result 是字串 'red' | 'blue' | 'draw'；humanColor 是 0/1 —— 不可直接相比
+function winnerColor(name){ return name==='red' ? RED : BLUE; }
+function winnerName(name){ return name==='draw' ? '和局' : colorName(winnerColor(name)); }
+function humanOutcome(name){                      // 'win' | 'lose' | 'draw'
+  if (name==='draw') return 'draw';
+  return winnerColor(name)===humanColor ? 'win' : 'lose';
+}
+function outcomeLabel(name, emoji){
+  const o = humanOutcome(name);
+  if (o==='draw') return '和局';
+  return o==='win' ? ('你贏了' + (emoji ? ' 🎉' : '')) : 'BOT 獲勝';
+}
+
+function render(){
+  // --- 格子 ---
+  const canAct = !gameOver && !thinking && turn===humanColor;
+  moveCountNow = genMoves();
+
+  let legalSet = null;
+  if (showHints && canAct){
+    legalSet = new Uint8Array(CELLS);
+    for (let k=0;k<moveCountNow;k++){ legalSet[mI(moveBuf[k])]=1; legalSet[mJ(moveBuf[k])]=1; }
+  }
+  const focus  = selected>=0 ? selected : (canAct ? hoverCell : -1);
+  const tgtSet = (focus>=0) ? new Set(partnersOf(focus)) : null;
+  const tgtCls = selected>=0 ? ' tgt' : ' near';
+
+  for (let i=0;i<CELLS;i++){
+    let cls = 'cell ' + (board[i]===RED ? 'red' : 'blue');
+    if (frozen[i]) cls += ' frozen';
+    if (legalSet && legalSet[i] && !frozen[i]) cls += ' movable';
+    if (i===selected) cls += ' sel';
+    if (tgtSet && tgtSet.has(i)) cls += tgtCls;
+    if (lastMove>=0 && (i===mI(lastMove) || i===mJ(lastMove))) cls += ' last';
+    if (cellEls[i].className !== cls) cellEls[i].className = cls;
+  }
+  boardEl.classList.toggle('locked', !canAct);
+
+  // --- 分數 ---
+  const tmax = (T===Infinity) ? MAX_SCORE : T;
+  elNumR.textContent = fmt(scores[0]);
+  elNumB.textContent = fmt(scores[1]);
+  elBarR.style.width = Math.min(100, scores[0]/tmax*100) + '%';
+  elBarB.style.width = Math.min(100, scores[1]/tmax*100) + '%';
+  elSubR.textContent = `最大連通區 ${maxReg[0]} 格` + (T!==Infinity ? ` · 目標 ${T}` : '');
+  elSubB.textContent = `最大連通區 ${maxReg[1]} 格` + (T!==Infinity ? ` · 目標 ${T}` : '');
+  elSideR.className = 'side' + (turn===RED && !gameOver ? ' active':'') + (humanColor===RED?' you':' bot');
+  elSideB.className = 'side' + (turn===BLUE && !gameOver ? ' active':'') + (humanColor===BLUE?' you':' bot');
+
+  // --- 狀態 ---
+  if (gameOver){
+    const o = humanOutcome(result.result);
+    elStatus.innerHTML = `<span class="pill ${o}">${outcomeLabel(result.result)}</span><span class="big">${
+      result.result==='draw' ? '和局' : winnerName(result.result)+'勝'}</span>`+
+      `<br><span style="color:var(--dim)">${result.reason}</span>`;
+  } else if (thinking){
+    elStatus.innerHTML = `<span class="thinking"></span><span class="big">BOT 思考中…</span>`;
+  } else {
+    const mine = turn===humanColor;
+    elStatus.innerHTML = `<span class="pill">第 ${ply+1} / ${maxPly} 手</span>`+
+      `<span class="big">輪到 ${colorName(turn)}（${whoIs(turn)}）</span>`;
+    if (!mine) elStatus.innerHTML += `<br><span style="color:var(--dim)">BOT 正在行棋…</span>`;
+  }
+
+  // --- 提示列 ---
+  updateHint();
+
+  // --- 棋譜 ---
+  renderLog();
+
+  // --- 按鈕 ---
+  btnUndo.textContent = `悔棋（剩 ${undoLeft}）`;
+  btnUndo.disabled = thinking || undoLeft<=0 || !history.some(h=>h.mover===humanColor);
+  btnPass.disabled = !canAct;
+  btnResign.disabled = gameOver || thinking;
+
+  // --- 浮層 ---
+  if (gameOver){
+    $('ovTitle').textContent = outcomeLabel(result.result, true);
+    $('ovText').textContent = result.reason + `　（共 ${ply} 手）`;
+    overlay.classList.add('on');
+  } else {
+    overlay.classList.remove('on');
+  }
+}
+
+function updateHint(){
+  if (gameOver){ hintEl.innerHTML = ''; return; }
+  if (thinking){ hintEl.innerHTML = 'BOT 正在計算…'; return; }
+  if (turn!==humanColor){ hintEl.innerHTML = ''; return; }
+  if (moveCountNow===0){ hintEl.innerHTML = '已無任何合法交換。'; return; }
+
+  if (selected<0){
+    hintEl.innerHTML = `<b>點一格</b>，再點它相鄰的<b>異色</b>格完成交換；或按「跳過」放棄這一手。`+
+      `<br>剩下 ${moveCountNow} 組可交換、已固化 ${ply*2} 格。`;
+  } else {
+    const x = selected%N+1, y = ((selected/N)|0)+1;
+    hintEl.innerHTML = `已選 <b>(${x},${y})</b>：點<span style="color:var(--gold)">金框</span>的鄰格交換（交換後兩格永久固化）。`;
+  }
+  if (previewHTML) hintEl.innerHTML += previewHTML;
+}
+
+let previewHTML = '';
+function setPreview(i){
+  previewHTML = '';
+  if (gameOver || thinking || turn!==humanColor || selected<0) return;
+  if (!isLegalPair(selected,i)) return;
+  const m = enc(selected,i);
+  const before = [scores[0],scores[1]];
+  applyMove(m); computeScores();
+  const after = [scores[0],scores[1]];
+  undoMove(m); computeScores();
+  const mine = humanColor;
+  const d = after[mine]-before[mine];
+  const ds = fmt(Math.abs(d));
+  const sign = d>1e-9 ? `<span class="up">+${ds}</span>` : (d<-1e-9 ? `<span class="down">−${ds}</span>` : '<span style="color:var(--dim)">±0</span>');
+  previewHTML = `<br>預覽：紅 ${fmt(after[0])} / 藍 ${fmt(after[1])}　（你 ${sign}）`;
+}
+
+function renderLog(force){
+  if (!force && logLines.length === logRendered) return;   // 只有真的落子才重建（滑鼠移動不重建）
+  const box = elLog;
+  const atBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 24;
+  logRendered = logLines.length;
+  box.innerHTML = logLines.map(l =>
+    `<div><span class="p">${l.ply}</span>`+
+    `<span class="who ${l.mover===RED?'r':'b'}">${l.mover===RED?'紅':'藍'}</span>`+
+    `<span class="mv${l.pass?' pass':''}">${l.text}</span>`+
+    `<span class="sc">${l.sc}</span></div>`).join('');
+  if (atBottom) box.scrollTop = box.scrollHeight;
+}
+
+/* =========================================================
+   互動
+   ========================================================= */
+function cellIndexFromEvent(e){
+  const t = e.target.closest('.cell');
+  if (!t) return -1;
+  return +t.dataset.i;
+}
+
+boardEl.addEventListener('click', e => {
+  const i = cellIndexFromEvent(e);
+  if (i<0) return;
+  if (gameOver || thinking || turn!==humanColor) return;
+
+  if (frozen[i]){ selected=-1; previewHTML=''; render(); return; }
+
+  if (selected<0){
+    if (partnersOf(i).length){ selected=i; }
+    else { selected=-1; }
+    previewHTML=''; render(); return;
+  }
+  if (i===selected){ selected=-1; previewHTML=''; render(); return; }
+  if (isLegalPair(selected,i)){
+    const m = enc(selected,i);
+    selected=-1; previewHTML='';
+    playMove(m);
+    return;
+  }
+  selected = partnersOf(i).length ? i : -1;
+  previewHTML='';
+  render();
+});
+
+boardEl.addEventListener('mouseover', e => {
+  const i = cellIndexFromEvent(e);
+  if (i<0 || i===hoverCell) return;
+  hoverCell = i;
+  if (selected>=0) setPreview(i); else previewHTML='';
+  render();
+});
+boardEl.addEventListener('mouseleave', () => {
+  if (hoverCell<0) return;
+  hoverCell = -1; previewHTML='';
+  render();
+});
+document.addEventListener('keydown', e => {
+  if (e.key==='Escape' && selected>=0){ selected=-1; previewHTML=''; render(); }
+});
+
+/* =========================================================
+   新局 / 悔棋 / 認輸
+   ========================================================= */
+function readSettings(){
+  difficulty = $('selDiff').value;
+  humanColor = +$('selSide').value;
+  botColor   = 1-humanColor;
+  T          = T_FIXED;      // 固定 500
+  maxPly     = PLY_CAP;      // 固定 120（紅 60 + 藍 60）
+  sendWin    = $('chkSend').checked;
+  showHints  = $('chkHints').checked;
+}
+
+function newGame(){
+  readSettings();
+  for (let y=0;y<N;y++) for (let x=0;x<N;x++) board[y*N+x] = (x+y)%2;
+  frozen.fill(0);
+  ply=0; turn=RED; gameOver=false; result=null;
+  history=[]; lastMove=-1; selected=-1; thinking=false;
+  logLines=[]; logRendered=-1; previewHTML=''; hoverCell=-1;
+  undoLeft = UNDO_MAX;
+  computeScores();
+  render();
+  if (turn===botColor) botPlay();
+}
+
+function revertOne(){
+  const h = history.pop();
+  if (h.m >= 0) undoMove(h.m);
+  ply--;
+  turn = h.mover;
+  gameOver=false; result=null;
+}
+
+function undo(){
+  if (thinking || undoLeft<=0) return;
+  let idx = -1;
+  for (let i=history.length-1;i>=0;i--) if (history[i].mover===humanColor){ idx=i; break; }
+  if (idx<0) return;
+  while (history.length>idx) revertOne();
+  undoLeft--;
+  lastMove = -1;
+  for (let i=history.length-1;i>=0;i--) if (history[i].m>=0){ lastMove = history[i].m; break; }
+  logLines.length = ply;
+  selected=-1; previewHTML='';
+  computeScores();
+  render();
+  if (turn===botColor) botPlay();
+}
+
+$('btnNew').addEventListener('click', newGame);
+btnUndo.addEventListener('click', undo);
+btnPass.addEventListener('click', () => {
+  if (gameOver || thinking || turn!==humanColor) return;
+  if (moveCountNow===0) return;
+  selected=-1; previewHTML='';
+  playPass();
+});
+btnResign.addEventListener('click', () => {
+  if (gameOver || thinking) return;
+  gameOver = true;
+  result = {result: humanColor===RED ? 'blue' : 'red', reason:`你按下了認輸（${scoreLine()}）`};
+  render();
+});
+$('chkHints').addEventListener('change', () => { showHints = $('chkHints').checked; render(); });
+
+/* =========================================================
+   啟動
+   ========================================================= */
+newGame();
+
+// 供測試用
+window.__game = {
+  board, frozen,
+  state: () => ({ply, turn, scores:[...scores], maxReg:[...maxReg], gameOver, result,
+                 frozenCount:frozen.reduce((a,b)=>a+b,0)}),
+  computeScores, genMoves:()=>genMoves(),
+  moves:()=>Array.from(moveBuf.subarray(0, genMoves())),
+  playMove, playPass, newGame, undo,
+  applyMove, undoMove, enc, mI, mJ, chooseBotMove, valueFor, fscore, fmt, MAX_SCORE,
+  humanOutcome, outcomeLabel, winnerName, winnerColor,
+  setT: v => { T = v; }, setSend: v => { sendWin = v; },
+  setCap: v => { maxPly = v; }, setUndoLeft: v => { undoLeft = v; },
+  setObjective: v => { botObjective = v; },
+  setSide: (h) => { humanColor = h; botColor = 1-h; }
+};
+})();
+</script>
+</body>
+</html>
