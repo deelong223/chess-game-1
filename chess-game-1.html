@@ -403,8 +403,22 @@ function undoMove(m){
   const t=board[i]; board[i]=board[j]; board[j]=t;
   frozen[i]=0; frozen[j]=0;
 }
+// 兩格必須真的上下左右相鄰。索引差 1 或 N 並不代表相鄰：
+// 差 1 在換行處會繞到另一側（x=20 與 x=1 是不同列），必須用座標判定。
+function isAdjacent(i,j){
+  if (i<0 || j<0 || i>=CELLS || j>=CELLS) return false;
+  const dx = (i%N) - (j%N), dy = ((i/N)|0) - ((j/N)|0);
+  return dx*dx + dy*dy === 1;                 // 曼哈頓距離 1（不含對角、不含繞邊）
+}
 function isLegalPair(i,j){
-  return !frozen[i] && !frozen[j] && board[i]!==board[j];
+  return isAdjacent(i,j) && !frozen[i] && !frozen[j] && board[i]!==board[j];
+}
+// 第二道防線：一手必須真的在 genMoves() 的清單裡（相鄰由 genMoves 統一產生）
+function isLegalMove(m){
+  if (m<0) return false;
+  const n = genMoves();
+  for (let k=0;k<n;k++) if (moveBuf[k]===m) return true;
+  return false;
 }
 function partnersOf(i){
   const out=[], x = i - ((i/N)|0)*N;
@@ -700,9 +714,10 @@ function updateHint(){
     hintEl.innerHTML = `已選 <b>(${x},${y})</b>：點<span style="color:var(--gold)">金框</span>的鄰格交換（交換後兩格永久固化）。`;
   }
   if (previewHTML) hintEl.innerHTML += previewHTML;
+  if (note) hintEl.innerHTML += `<br><span class="down">${note}</span>`;
 }
 
-let previewHTML = '';
+let previewHTML = '', note = '';
 function setPreview(i){
   previewHTML = '';
   if (gameOver || thinking || turn!==humanColor || selected<0) return;
@@ -746,19 +761,26 @@ boardEl.addEventListener('click', e => {
   if (i<0) return;
   if (gameOver || thinking || turn!==humanColor) return;
 
+  note = '';
+
   if (frozen[i]){ selected=-1; previewHTML=''; render(); return; }
 
   if (selected<0){
     if (partnersOf(i).length){ selected=i; }
-    else { selected=-1; }
+    else { selected=-1; note = '這一格沒有可交換的鄰格（四鄰必須未固化、且顏色不同）。'; }
     previewHTML=''; render(); return;
   }
   if (i===selected){ selected=-1; previewHTML=''; render(); return; }
   if (isLegalPair(selected,i)){
     const m = enc(selected,i);
     selected=-1; previewHTML='';
+    if (!isLegalMove(m)){ render(); return; }   // 理論上到不了；確保只走 genMoves 產生的一手
     playMove(m);
     return;
+  }
+  // 走到這裡代表不是合法的一手：多半是點了不相鄰的格子（舊版這裡會直接交換 → bug）
+  if (board[i]!==board[selected] && !frozen[i]){
+    note = `(${selected%N+1},${((selected/N)|0)+1}) 與 (${i%N+1},${((i/N)|0)+1}) 不相鄰，只能跟上下左右的鄰格交換。`;
   }
   selected = partnersOf(i).length ? i : -1;
   previewHTML='';
@@ -861,6 +883,7 @@ window.__game = {
   moves:()=>Array.from(moveBuf.subarray(0, genMoves())),
   playMove, playPass, newGame, undo,
   applyMove, undoMove, enc, mI, mJ, chooseBotMove, valueFor, fscore, fmt, MAX_SCORE,
+  isAdjacent, isLegalPair, isLegalMove, partnersOf,
   humanOutcome, outcomeLabel, winnerName, winnerColor,
   setT: v => { T = v; }, setSend: v => { sendWin = v; },
   setCap: v => { maxPly = v; }, setUndoLeft: v => { undoLeft = v; },
