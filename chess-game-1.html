@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Chess Game 1 — v3 固化版（人 vs Bot）</title>
+<title>Chess Game 1 — 0.0.1SNAPSHOT（人 vs Bot）</title>
 <style>
   :root{
     --bg:#0e1117;
@@ -164,7 +164,7 @@
 <body>
 <div class="wrap">
   <header>
-    <h1>Chess Game 1 — v3.1 固化版</h1>
+    <h1>Chess Game 1 — 0.0.1SNAPSHOT</h1>
     <span class="tag">n = 20</span>
     <span class="tag">交換後兩格永久固化</span>
     <span class="tag">k·log₂k 計分（無 floor）</span>
@@ -244,7 +244,7 @@
       </div>
 
       <details>
-        <summary>完整規則（v3.1 固定版）— 點開</summary>
+        <summary>完整規則（0.0.1SNAPSHOT）— 點開</summary>
         <div class="body">
           <p style="margin:2px 0 8px;color:#8b98a9">座標顯示為 <code>(橫,縱)</code>：<b>第一個數字是橫向位置</b>、第二個是縱向位置，皆從 1 開始。</p>
 
@@ -295,7 +295,8 @@
           <ul>
             <li>交換是<b>對稱操作</b> —— 對任何一組相鄰異色格，「紅方動紅子」與「藍方動藍子」造成的下一盤面<b>完全相同</b>。</li>
             <li>所以「只能移動自己的棋子」在數學上<b>不構成任何限制</b>：雙方每一手的可選走法集合永遠相同。所有權只決定「你要為哪一色得分」。</li>
-            <li>結論：<b>你也可以直接點藍格來交換</b>，那是完全合法的走法，不是 bug。</li>
+            <li>結論：<b>你也可以直接點對手的顏色來交換</b>，那是完全合法的走法，不是 bug；BOT 也一樣，它常常「動到你的顏色」。</li>
+            <li>也因為交換是對稱的，<b>BOT 的一手常常同時讓你也加分</b>（兩邊都受益）。那不是 BOT 在幫你 —— 它的目標函數永遠是自己的分數，只是交換本身就會同時改變雙方分數。</li>
           </ul>
         </div>
       </details>
@@ -327,7 +328,7 @@ let logRendered = -1;
 // 設定（開新局時套用）
 let humanColor = RED, botColor = BLUE;
 let difficulty = 'normal';
-let T = 500;              // 固定勝利門檻（v3.1）
+let T = 500;              // 固定勝利門檻
 let sendWin = true;
 let maxPly = 120;         // 固定上限：紅 60 + 藍 60
 let showHints = true;
